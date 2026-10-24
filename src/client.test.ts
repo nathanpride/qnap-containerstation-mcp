@@ -524,3 +524,46 @@ describe("v3 bridge", () => {
     await expect((client as any).requestV3("/apps/compose")).rejects.toThrow(/did not return a session cookie/);
   });
 });
+
+describe("compose apps (v3)", () => {
+  const V3 = `${BASE_URL}/container-station/api/v3`;
+  const LOGIN = { status: 200, body: { username: "user" }, headers: { "set-cookie": "CS_SESS_ID=xyz789; Path=/" } };
+
+  it("listComposeApps unwraps data.items", async () => {
+    const fetchMock = mockFetch([
+      LOGIN,
+      { status: 200, body: { data: { items: [{ name: "monitoring", status: "running" }] } } },
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient();
+    const apps = await client.listComposeApps();
+    expect(apps).toHaveLength(1);
+    expect(apps[0].name).toBe("monitoring");
+    expect(fetchMock.mock.calls[1][0]).toBe(`${V3}/apps/compose`);
+  });
+
+  it("listComposeApps returns an empty list when the response has no items", async () => {
+    const fetchMock = mockFetch([LOGIN, { status: 200, body: {} }]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient();
+    await expect(client.listComposeApps()).resolves.toEqual([]);
+  });
+
+  it("getComposeFile returns the yml field and encodes the app name", async () => {
+    const fetchMock = mockFetch([
+      LOGIN,
+      { status: 200, body: { data: { yml: "services: {}" } } },
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient();
+    await expect(client.getComposeFile("my app")).resolves.toBe("services: {}");
+    expect(fetchMock.mock.calls[1][0]).toBe(`${V3}/apps/my%20app/inspect`);
+  });
+
+  it("getComposeFile throws when the response has no yml", async () => {
+    const fetchMock = mockFetch([LOGIN, { status: 200, body: { data: {} } }]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient();
+    await expect(client.getComposeFile("monitoring")).rejects.toThrow(/No compose YAML available/);
+  });
+});

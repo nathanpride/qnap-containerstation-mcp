@@ -54,6 +54,22 @@ export interface LogEntry {
   user: string;
 }
 
+export interface ComposeAppSummary {
+  name: string;
+  status: string;
+  type: string;
+  containers: number;
+  defaultURL: string;
+  created: string;
+  [key: string]: unknown;
+}
+
+export interface ComposeAppInspect {
+  yml?: string;
+  containers?: unknown[];
+  [key: string]: unknown;
+}
+
 export interface ContainerStationClientOptions {
   baseUrl: string;
   username: string;
@@ -263,5 +279,22 @@ export class ContainerStationClient {
     if (params?.category) qs.set("category", params.category);
     const query = qs.toString() ? `?${qs}` : "";
     return this.request<LogEntry[]>(`/log${query}`);
+  }
+
+  // The two methods below use the v3 API (Container Station 3.1+). The
+  // endpoints are not documented and may differ between versions.
+
+  async listComposeApps(): Promise<ComposeAppSummary[]> {
+    const res = await this.requestV3<{ data?: { items?: ComposeAppSummary[] } }>("/apps/compose");
+    return res.data?.items ?? [];
+  }
+
+  async getComposeFile(name: string): Promise<string> {
+    const res = await this.requestV3<{ data?: ComposeAppInspect }>(`/apps/${encodeURIComponent(name)}/inspect`);
+    const yml = res.data?.yml;
+    if (!yml) {
+      throw new Error(`No compose YAML available for application "${name}"`);
+    }
+    return yml;
   }
 }

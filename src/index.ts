@@ -176,6 +176,33 @@ server.registerTool(
 );
 
 server.registerTool(
+  "list_compose_apps",
+  {
+    title: "List Compose Apps",
+    description: "List Docker Compose applications with status and resource limits (v3 API, Container Station 3.1+)",
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const apps = await client.listComposeApps();
+    return { content: [{ type: "text", text: JSON.stringify(apps, null, 2) }] };
+  }
+);
+
+server.registerTool(
+  "get_compose_file",
+  {
+    title: "Get Compose File",
+    description: "Get the docker-compose YAML that Container Station uses for an application (v3 API, Container Station 3.1+)",
+    inputSchema: { name: appNameSchema },
+    annotations: READ_ONLY,
+  },
+  async ({ name }) => {
+    const yml = await client.getComposeFile(name);
+    return { content: [{ type: "text", text: yml }] };
+  }
+);
+
+server.registerTool(
   "get_system_resource",
   {
     title: "Get System Resource Usage",

@@ -43,8 +43,8 @@ function toolConfig(name: string) {
 }
 
 describe("tool registration", () => {
-  it("registers all 13 tools and connects over stdio", () => {
-    expect(mocks.registerTool).toHaveBeenCalledTimes(13);
+  it("registers all 15 tools and connects over stdio", () => {
+    expect(mocks.registerTool).toHaveBeenCalledTimes(15);
     expect(mocks.connect).toHaveBeenCalledTimes(1);
   });
 
@@ -61,6 +61,8 @@ describe("tool registration", () => {
       "get_container",
       "get_container_logs",
       "list_apps",
+      "list_compose_apps",
+      "get_compose_file",
       "get_system_resource",
       "list_networks",
       "get_logs",
@@ -103,6 +105,7 @@ describe("tool registration", () => {
     expect(Object.keys(toolConfig("get_container").inputSchema)).toEqual(["type", "id"]);
     expect(Object.keys(toolConfig("get_container_logs").inputSchema)).toEqual(["id"]);
     expect(Object.keys(toolConfig("start_app").inputSchema)).toEqual(["name"]);
+    expect(Object.keys(toolConfig("get_compose_file").inputSchema)).toEqual(["name"]);
     expect(Object.keys(toolConfig("get_logs").inputSchema)).toEqual(["limit", "offset", "level", "category"]);
   });
 });
