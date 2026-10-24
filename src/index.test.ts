@@ -19,6 +19,8 @@ vi.mock("./client.js", () => {
     getSystemResource: vi.fn(),
     listNetworks: vi.fn(),
     getLogs: vi.fn(),
+    listComposeApps: vi.fn(),
+    getComposeFile: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
   };
@@ -143,5 +145,29 @@ describe("tool: get_logs", () => {
 
     await mock.getLogs({ limit: 5, level: "ERROR" });
     expect(mock.getLogs).toHaveBeenCalledWith({ limit: 5, level: "ERROR" });
+  });
+});
+
+describe("tool: list_compose_apps", () => {
+  it("returns compose app summaries", async () => {
+    const mock = await getMock();
+    mock.listComposeApps.mockResolvedValue([
+      { name: "monitoring", status: "running", type: "qnap", containers: 4, defaultURL: "", created: "2026-01-01" },
+    ]);
+
+    const result = await mock.listComposeApps();
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("monitoring");
+  });
+});
+
+describe("tool: get_compose_file", () => {
+  it("returns the compose YAML for an app", async () => {
+    const mock = await getMock();
+    mock.getComposeFile.mockResolvedValue("services:\n  prometheus:\n    image: prom/prometheus\n");
+
+    const result = await mock.getComposeFile("monitoring");
+    expect(mock.getComposeFile).toHaveBeenCalledWith("monitoring");
+    expect(result).toContain("prometheus");
   });
 });

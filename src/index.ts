@@ -127,6 +127,26 @@ server.tool(
 );
 
 server.tool(
+  "list_compose_apps",
+  "List Docker Compose applications with status and resource limits (v3 API, Container Station 3.1+)",
+  {},
+  async () => {
+    const apps = await client.listComposeApps();
+    return { content: [{ type: "text", text: JSON.stringify(apps, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_compose_file",
+  "Get the docker-compose YAML that Container Station uses for an application (v3 API, Container Station 3.1+)",
+  { name: z.string().describe("Application name") },
+  async ({ name }) => {
+    const yml = await client.getComposeFile(name);
+    return { content: [{ type: "text", text: yml }] };
+  }
+);
+
+server.tool(
   "get_system_resource",
   "Get current CPU and memory usage",
   {},
