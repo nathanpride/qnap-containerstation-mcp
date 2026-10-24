@@ -53,7 +53,7 @@ Add to `.mcp.json` in your project root:
 
 ## Claude Desktop
 
-Add to `~/.config/Claude/claude_desktop_config.json`:
+Add to `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
@@ -71,6 +71,55 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
+## OpenCode
+
+Add to `opencode.json` (project) or `~/.config/opencode/opencode.json` (global).
+
+**OpenCode v1:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "qnap-container-station": {
+      "type": "local",
+      "command": ["node", "/path/to/qnap-containerstation-mcp/dist/index.js"],
+      "enabled": true,
+      "environment": {
+        "QNAP_URL": "https://your-qnap.local",
+        "QNAP_USERNAME": "container-mcp",
+        "QNAP_PASSWORD": "your-password",
+        "QNAP_VERIFY_SSL": "false"
+      }
+    }
+  }
+}
+```
+
+**OpenCode v2:** servers move under `mcp.servers`, and `enabled` is replaced by the inverse `disabled`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "qnap-container-station": {
+        "type": "local",
+        "command": ["node", "/path/to/qnap-containerstation-mcp/dist/index.js"],
+        "environment": {
+          "QNAP_URL": "https://your-qnap.local",
+          "QNAP_USERNAME": "container-mcp",
+          "QNAP_PASSWORD": "your-password",
+          "QNAP_VERIFY_SSL": "false"
+        }
+      }
+    }
+  }
+}
+```
+
+In v2 you can also reference your shell environment instead of hardcoding secrets: `"QNAP_PASSWORD": "{env:QNAP_PASSWORD}"`.
 
 ## Available Tools
 
