@@ -1,3 +1,4 @@
+import { Agent } from "undici";
 import { CookieJar } from "tough-cookie";
 
 export interface Container {
@@ -66,6 +67,7 @@ export class ContainerStationClient {
   private password: string;
   private verifySSL: boolean;
   private cookieJar: CookieJar;
+  private dispatcher?: Agent;
   private loggedIn = false;
 
   constructor(options: ContainerStationClientOptions) {
@@ -74,6 +76,12 @@ export class ContainerStationClient {
     this.password = options.password;
     this.verifySSL = options.verifySSL ?? true;
     this.cookieJar = new CookieJar();
+    if (!this.verifySSL) {
+      // Skip certificate verification for this client only, instead of
+      // disabling TLS verification process-wide via
+      // NODE_TLS_REJECT_UNAUTHORIZED.
+      this.dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    }
   }
 
   private async fetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -86,11 +94,11 @@ export class ContainerStationClient {
     };
     if (cookieString) headers["Cookie"] = cookieString;
 
-    if (!this.verifySSL) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-
-    const response = await fetch(url, { ...init, headers });
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      ...(this.dispatcher && { dispatcher: this.dispatcher }),
+    } as RequestInit);
 
     const setCookie = response.headers.get("set-cookie");
     if (setCookie) {
