@@ -259,3 +259,94 @@ describe("compose apps (v3)", () => {
     await expect(client.getComposeFile("monitoring")).rejects.toThrow(/No compose YAML available/);
   });
 });
+
+describe("v3 read-only + create/validate", () => {
+  const V3 = `${BASE_URL}/container-station/api/v3`;
+  const LOGIN = { status: 200, body: { username: "user" }, headers: { "set-cookie": "CS_SESS_ID=xyz789; Path=/" } };
+
+  function recordingFetch(responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>) {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    let call = 0;
+    const fn = vi.fn(async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, method: init.method ?? "GET", body: init.body as string | undefined });
+      const r = responses[call++] ?? responses[responses.length - 1];
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        headers: { get: (h: string) => r.headers?.[h] ?? null },
+        json: async () => r.body,
+        text: async () => JSON.stringify(r.body),
+      };
+    });
+    return { fn, calls };
+  }
+
+  it("listImages GETs /images and unwraps items", async () => {
+    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: { items: [{ id: "sha256:abc", tags: ["nginx"] }] } } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const imgs = await client.listImages();
+    expect(calls[1].url).toBe(`${V3}/images`);
+    expect(imgs).toEqual([{ id: "sha256:abc", tags: ["nginx"] }]);
+  });
+
+  it("listVolumes GETs /volumes and unwraps items", async () => {
+    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: { items: [{ name: "gitea_data", driver: "local" }] } } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const vols = await client.listVolumes();
+    expect(calls[1].url).toBe(`${V3}/volumes`);
+    expect(vols[0].name).toBe("gitea_data");
+  });
+
+  it("getOverview GETs /overview", async () => {
+    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: { apps: [{ name: "gitea", status: "running" }] } } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const ov = await client.getOverview();
+    expect(calls[1].url).toBe(`${V3}/overview`);
+    expect(ov).toEqual({ apps: [{ name: "gitea", status: "running" }] });
+  });
+
+  it("validateCompose POSTs {yml} to /apps/config and returns valid on 200", async () => {
+    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: {} } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const res = await client.validateCompose("services: {}");
+    expect(calls[1].method).toBe("POST");
+    expect(calls[1].url).toBe(`${V3}/apps/config`);
+    expect(JSON.parse(calls[1].body!)).toEqual({ yml: "services: {}" });
+    expect(res).toEqual({ valid: true });
+  });
+
+  it("validateCompose returns the server message on an invalid document", async () => {
+    const { fn } = recordingFetch([
+      LOGIN,
+      { status: 500, body: { code: 1004, message: "validate compose config failed: yaml: line 2: bad" } },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const res = await client.validateCompose("bad: [");
+    expect(res.valid).toBe(false);
+    expect(res.message).toMatch(/yaml: line 2/);
+  });
+
+  it("createComposeApp POSTs name, yml and operation:create to /apps/compose", async () => {
+    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: {} } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.createComposeApp("myapp", "services: {}");
+    expect(calls[1].method).toBe("POST");
+    expect(calls[1].url).toBe(`${V3}/apps/compose`);
+    expect(JSON.parse(calls[1].body!)).toEqual({ name: "myapp", yml: "services: {}", operation: "create" });
+  });
+
+  it("createComposeApp surfaces a server error (e.g. name collision)", async () => {
+    vi.stubGlobal("fetch", mockFetch([
+      LOGIN,
+      { status: 400, body: { code: 2001, message: "application name already exists" } },
+    ]));
+    const client = makeClient();
+    await expect(client.createComposeApp("dup", "services: {}")).rejects.toThrow(/already exists/);
+  });
+});

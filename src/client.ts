@@ -69,6 +69,27 @@ export interface ComposeAppInspect {
   [key: string]: unknown;
 }
 
+export interface V3Image {
+  id: string;
+  type?: string;
+  tags?: string[];
+  repoDigests?: string[];
+  size?: number;
+  created?: string | number;
+  [key: string]: unknown;
+}
+
+export interface V3Volume {
+  name: string;
+  driver?: string;
+  mountPoint?: string;
+  project?: string;
+  used?: boolean;
+  size?: number;
+  created?: string;
+  [key: string]: unknown;
+}
+
 export interface ContainerStationClientOptions {
   baseUrl: string;
   username: string;
@@ -288,5 +309,59 @@ export class ContainerStationClient {
       throw new Error(`No compose YAML available for application "${name}"`);
     }
     return yml;
+  }
+
+  async listImages(): Promise<V3Image[]> {
+    const res = await this.requestV3<{ data?: { items?: V3Image[] } }>("/images");
+    return res.data?.items ?? [];
+  }
+
+  async listVolumes(): Promise<V3Volume[]> {
+    const res = await this.requestV3<{ data?: { items?: V3Volume[] } }>("/volumes");
+    return res.data?.items ?? [];
+  }
+
+  async getOverview(): Promise<Record<string, unknown>> {
+    const res = await this.requestV3<{ data?: Record<string, unknown> }>("/overview");
+    return res.data ?? {};
+  }
+
+  // POST /apps/config is the validator the Container Station UI itself uses:
+  // 200 means the YAML is deployable; an invalid document comes back as
+  // 500 with {code, message}. The message is returned, not thrown, so the
+  // caller can show it to the user as feedback rather than an error.
+  async validateCompose(yml: string): Promise<{ valid: boolean; message?: string }> {
+    try {
+      await this.requestV3("/apps/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yml }),
+      });
+      return { valid: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const m = msg.match(/^Request failed \(\d+\): (.*)$/s);
+      if (m) {
+        try {
+          const parsed = JSON.parse(m[1]);
+          if (typeof parsed?.message === "string") {
+            return { valid: false, message: parsed.message.trim() };
+          }
+        } catch {
+          // body was not the expected JSON — surface the original error
+        }
+      }
+      throw err;
+    }
+  }
+
+  // operation:"create" is what the UI sends; the same endpoint also accepts
+  // "recreate"/"duplicate", which this client deliberately never sends.
+  async createComposeApp(name: string, yml: string): Promise<void> {
+    await this.requestV3("/apps/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, yml, operation: "create" }),
+    });
   }
 }
