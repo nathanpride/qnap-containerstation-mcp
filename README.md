@@ -150,6 +150,57 @@ In v2 you can also reference your shell environment instead of hardcoding secret
 > officially documented and may change between versions; both tools reuse the same
 > v1 login session and fail with a clear error if the endpoints are unavailable.
 
+## TLS Certificates for Compose Apps
+
+Container Station does not manage certificates for your containers — you do.
+The recommended pattern is a fixed host directory, bind-mounted read-only
+into the app. (Public ACME / "Caddy automatic HTTPS" cannot issue for local
+`.lan`/`.internal` names; use a locally issued certificate as below, or
+DNS-09 against a public domain.)
+
+### The directory
+
+Use `/share/Container/certs/<domain>/` — a convention, not a Docker
+requirement (the compose YAML defines the source path):
+
+- `/share/Container` is Container Station's persistent data root: it survives
+  reboots, Container Station upgrades, and reinstalls.
+- Do **not** use `/tmp`, `/root`, `/home`, or `/etc` — on QTS these live on the
+  firmware partition and are wiped on every reboot.
+- It is reachable for file placement via SFTP, WebDAV, or File Station.
+
+### Order of operations
+
+1. Create the directory and place the certificate files **before** creating
+   the app. Docker silently auto-creates missing bind-mount sources as
+   root-owned empty directories — an app created first starts with no
+   certificates, and the auto-created directory has permissions you did not
+   choose.
+2. Set permissions for the user the container process runs as:
+   - Official caddy/nginx/traefik images run as root: `root:root`, cert
+     `0644`, key `0600` is sufficient.
+   - If the service sets `user: 1000:1000`, the files must be readable by
+     that container uid (QNAP user ids are unrelated to container uids —
+     `chown` to the container's uid, not a QNAP user).
+3. Reference the files in the compose YAML, mounted read-only:
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    ports: ["443:443"]
+    volumes:
+      - /share/Container/certs/home.example.lan:/certs:ro
+```
+
+4. Create the app. If the files were in place first, no restart is needed.
+
+### Renewal
+
+Replace the files, then restart the app (`restart_app`). Caddy and nginx pick
+up the new files on restart; Traefik's file certificate provider reloads
+them on its own.
+
 ## Tests
 
 ```bash
