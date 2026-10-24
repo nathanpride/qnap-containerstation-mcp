@@ -62,6 +62,7 @@ export interface ContainerStationClientOptions {
 
 export class ContainerStationClient {
   private baseUrl: string;
+  private v3BaseUrl: string;
   private username: string;
   private password: string;
   private verifySSL: boolean;
@@ -70,14 +71,18 @@ export class ContainerStationClient {
 
   constructor(options: ContainerStationClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "") + "/container-station/api/v1";
+    // Container Station 3.1+ also exposes an undocumented v3 API, used by its
+    // own web UI. It shares the session established by the v1 login: the v1
+    // session cookie value is accepted as a Bearer token on v3 endpoints.
+    this.v3BaseUrl = this.baseUrl.replace(/\/v1$/, "/v3");
     this.username = options.username;
     this.password = options.password;
     this.verifySSL = options.verifySSL ?? true;
     this.cookieJar = new CookieJar();
   }
 
-  private async fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const url = `${this.baseUrl}${path}`;
+  private async fetch(path: string, init: RequestInit = {}, base: string = this.baseUrl): Promise<Response> {
+    const url = `${base}${path}`;
     const cookieString = await this.cookieJar.getCookieString(url);
 
     const headers: Record<string, string> = {
@@ -129,6 +134,48 @@ export class ContainerStationClient {
       this.loggedIn = false;
       await this.login();
       response = await this.fetch(path, init);
+    }
+
+    if (response.status === 404) {
+      throw new Error(`Endpoint not found (404): ${path} — this may not be supported by your Container Station version`);
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Request failed (${response.status}): ${body}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  private async sessionToken(): Promise<string> {
+    const cookies = await this.cookieJar.getCookies(this.baseUrl);
+    const session = cookies.find((c) => c.key === "CS_SESS_ID") ?? cookies[0];
+    if (!session) {
+      throw new Error("Container Station login did not return a session cookie");
+    }
+    return session.value;
+  }
+
+  // Same semantics as request(), but against the v3 API: the v1 session id
+  // is sent as a Bearer token instead of a cookie.
+  private async requestV3<T>(path: string, init: RequestInit = {}): Promise<T> {
+    if (!this.loggedIn) await this.login();
+
+    const send = async () => {
+      const token = await this.sessionToken();
+      return this.fetch(path, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, ...(init.headers as Record<string, string> ?? {}) },
+      }, this.v3BaseUrl);
+    };
+
+    let response = await send();
+
+    if (response.status === 401) {
+      this.loggedIn = false;
+      await this.login();
+      response = await send();
     }
 
     if (response.status === 404) {

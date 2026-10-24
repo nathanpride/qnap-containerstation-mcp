@@ -149,3 +149,70 @@ describe("getLogs", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("category=container");
   });
 });
+
+describe("v3 bridge", () => {
+  const V3 = `${BASE_URL}/container-station/api/v3`;
+  const LOGIN = { status: 200, body: { username: "user" }, headers: { "set-cookie": "CS_SESS_ID=xyz789; Path=/" } };
+
+  function capturingFetch(responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>) {
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    let call = 0;
+    const fn = vi.fn(async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, headers: (init.headers as Record<string, string>) ?? {} });
+      const r = responses[call++] ?? responses[responses.length - 1];
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        headers: { get: (h: string) => r.headers?.[h] ?? null },
+        json: async () => r.body,
+        text: async () => JSON.stringify(r.body),
+      };
+    });
+    return { fn, calls };
+  }
+
+  it("sends the v1 session id as a Bearer token to the v3 base URL", async () => {
+    const { fn, calls } = capturingFetch([LOGIN, { status: 200, body: { data: {} } }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await (client as any).requestV3("/apps/compose");
+    expect(calls[1].url).toBe(`${V3}/apps/compose`);
+    expect(calls[1].headers["Authorization"]).toBe("Bearer xyz789");
+  });
+
+  it("re-logs in and retries once after a 401", async () => {
+    const { fn, calls } = capturingFetch([
+      LOGIN,
+      { status: 401, body: { message: "unauthorized" } },
+      LOGIN,
+      { status: 200, body: { data: {} } },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await expect((client as any).requestV3("/apps/compose")).resolves.toEqual({ data: {} });
+    expect(calls).toHaveLength(4);
+  });
+
+  it("throws a version hint on 404", async () => {
+    vi.stubGlobal("fetch", mockFetch([LOGIN, { status: 404, body: { message: "not found" } }]));
+    const client = makeClient();
+    await expect((client as any).requestV3("/apps/x/inspect")).rejects.toThrow(/Endpoint not found \(404\)/);
+  });
+
+  it("falls back to the first cookie when CS_SESS_ID is absent", async () => {
+    const { fn, calls } = capturingFetch([
+      { status: 200, body: { username: "user" }, headers: { "set-cookie": "OTHER_COOKIE=abc; Path=/" } },
+      { status: 200, body: { data: {} } },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await (client as any).requestV3("/apps/compose");
+    expect(calls[1].headers["Authorization"]).toBe("Bearer abc");
+  });
+
+  it("throws when login returned no session cookie", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { username: "user" } }]));
+    const client = makeClient();
+    await expect((client as any).requestV3("/apps/compose")).rejects.toThrow(/did not return a session cookie/);
+  });
+});
