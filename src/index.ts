@@ -159,7 +159,7 @@ server.tool(
 
 server.tool(
   "create_compose_app",
-  "Create a Docker Compose application from a YAML document (v3 API, Container Station 3.1+). The YAML is validated server-side. Bind-mount source paths must already exist on the NAS — Docker creates missing paths as root-owned empty directories.",
+  "Create a Docker Compose application from a YAML document (v3 API, Container Station 3.1+). Fails if an app with this name already exists (it will not redeploy an existing app). The YAML is validated server-side. Bind-mount source paths must already exist on the NAS — Docker creates missing paths as root-owned empty directories.",
   {
     name: z.string().min(1).describe("Application name"),
     yml: z.string().min(1).describe("docker-compose YAML document"),

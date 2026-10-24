@@ -332,21 +332,47 @@ describe("v3 read-only + create/validate", () => {
   });
 
   it("createComposeApp POSTs name, yml and operation:create to /apps/compose", async () => {
-    const { fn, calls } = recordingFetch([LOGIN, { status: 200, body: { data: {} } }]);
+    const { fn, calls } = recordingFetch([
+      LOGIN,
+      { status: 404, body: { code: 1009, message: "cannot find compose" } },
+      { status: 200, body: { data: {} } },
+    ]);
     vi.stubGlobal("fetch", fn);
     const client = makeClient();
     await client.createComposeApp("myapp", "services: {}");
-    expect(calls[1].method).toBe("POST");
-    expect(calls[1].url).toBe(`${V3}/apps/compose`);
-    expect(JSON.parse(calls[1].body!)).toEqual({ name: "myapp", yml: "services: {}", operation: "create" });
+    expect(calls[1].url).toBe(`${V3}/apps/myapp/inspect`);
+    expect(calls[2].method).toBe("POST");
+    expect(calls[2].url).toBe(`${V3}/apps/compose`);
+    expect(JSON.parse(calls[2].body!)).toEqual({ name: "myapp", yml: "services: {}", operation: "create" });
   });
 
-  it("createComposeApp surfaces a server error (e.g. name collision)", async () => {
+  it("createComposeApp refuses to redeploy an existing app", async () => {
+    const { fn, calls } = recordingFetch([
+      LOGIN,
+      { status: 200, body: { data: { yml: "services: {}" } } },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await expect(client.createComposeApp("myapp", "services: {}")).rejects.toThrow(/already exists/);
+    // only the existence check ran — no POST was sent
+    expect(calls).toHaveLength(2);
+    expect(calls[1].method).toBe("GET");
+  });
+
+  it("appExists returns true on 200 and false on 404", async () => {
+    vi.stubGlobal("fetch", mockFetch([LOGIN, { status: 200, body: { data: { yml: "x" } } }]));
+    await expect(makeClient().appExists("a")).resolves.toBe(true);
+    vi.stubGlobal("fetch", mockFetch([LOGIN, { status: 404, body: { code: 1009 } }]));
+    await expect(makeClient().appExists("b")).resolves.toBe(false);
+  });
+
+  it("createComposeApp surfaces a server error (e.g. invalid yaml)", async () => {
     vi.stubGlobal("fetch", mockFetch([
       LOGIN,
-      { status: 400, body: { code: 2001, message: "application name already exists" } },
+      { status: 404, body: { code: 1009, message: "cannot find compose" } },
+      { status: 400, body: { code: 2001, message: "invalid compose config" } },
     ]));
     const client = makeClient();
-    await expect(client.createComposeApp("dup", "services: {}")).rejects.toThrow(/already exists/);
+    await expect(client.createComposeApp("app", "bad")).rejects.toThrow(/invalid compose config/);
   });
 });

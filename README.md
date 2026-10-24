@@ -105,10 +105,11 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 > the Container Station web UI itself uses). It is not officially documented and
 > may change between versions; all reuse the same v1 login session and fail with
 > a clear error if the endpoints are unavailable. `create_compose_app` is the one
-> **write** tool: it sends `operation:"create"` only (never recreate/duplicate),
-> so it fails rather than overwriting an existing app. Bind-mount source paths in
-> the YAML must already exist on the NAS — see the TLS section of the README for
-> the directory and ordering rules.
+> **write** tool. Verified live: the underlying endpoint would silently re-run
+> compose-up (redeploy) for an existing name, so the client checks existence
+> first and **refuses to redeploy** — create is strictly create-only. Bind-mount
+> source paths in the YAML must already exist on the NAS — see the TLS section
+> of the README for the directory and ordering rules.
 
 ## Tests
 

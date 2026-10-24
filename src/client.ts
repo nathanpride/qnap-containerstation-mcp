@@ -355,9 +355,33 @@ export class ContainerStationClient {
     }
   }
 
+  // GET /apps/{name}/inspect answers 200 for an existing compose app and
+  // 404 {code:1009,"cannot find compose"} for a missing one — a clean
+  // existence signal. A 404 here can also mean the endpoint is absent on
+  // older Container Station versions; callers treat that as "not found"
+  // and let the subsequent request surface the real error.
+  async appExists(name: string): Promise<boolean> {
+    try {
+      await this.requestV3<{ data?: ComposeAppInspect }>(`/apps/${encodeURIComponent(name)}/inspect`);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("Endpoint not found (404)")) return false;
+      throw err;
+    }
+  }
+
   // operation:"create" is what the UI sends; the same endpoint also accepts
   // "recreate"/"duplicate", which this client deliberately never sends.
+  // Verified live: POST /apps/compose with an EXISTING name does not fail —
+  // it runs compose-up again, i.e. it would redeploy the running app. The
+  // existence check below makes this method strictly create-only.
   async createComposeApp(name: string, yml: string): Promise<void> {
+    if (await this.appExists(name)) {
+      throw new Error(
+        `Compose app "${name}" already exists — refusing to redeploy it (create is non-destructive)`
+      );
+    }
     await this.requestV3("/apps/compose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
