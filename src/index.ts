@@ -166,7 +166,14 @@ server.tool(
   },
   async ({ name, yml }) => {
     await client.createComposeApp(name, yml);
-    return { content: [{ type: "text", text: `Compose app ${name} created.` }] };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Compose app ${name} accepted; deployment started. Check list_compose_apps for status (deployment is asynchronous).`,
+        },
+      ],
+    };
   }
 );
 

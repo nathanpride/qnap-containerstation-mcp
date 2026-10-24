@@ -375,7 +375,9 @@ export class ContainerStationClient {
   // "recreate"/"duplicate", which this client deliberately never sends.
   // Verified live: POST /apps/compose with an EXISTING name does not fail —
   // it runs compose-up again, i.e. it would redeploy the running app. The
-  // existence check below makes this method strictly create-only.
+  // existence check below makes this method strictly create-only. The
+  // check-then-create pair is not atomic; concurrent creators of the same
+  // name (another client between the two calls) would still redeploy.
   async createComposeApp(name: string, yml: string): Promise<void> {
     if (await this.appExists(name)) {
       throw new Error(
