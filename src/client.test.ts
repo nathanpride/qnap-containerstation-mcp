@@ -149,3 +149,49 @@ describe("getLogs", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("category=container");
   });
 });
+
+describe("path encoding", () => {
+  const API = `${BASE_URL}/container-station/api/v1`;
+
+  function capturingFetch() {
+    const urls: string[] = [];
+    const fn = vi.fn(async (url: string) => {
+      urls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({}),
+        text: async () => "",
+      };
+    });
+    return { fn, urls };
+  }
+
+  it("percent-encodes container ids", async () => {
+    const { fn, urls } = capturingFetch();
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    (client as any).loggedIn = true;
+    await client.getContainer("docker", "a b/c?d");
+    expect(urls[0]).toBe(`${API}/container/docker/a%20b%2Fc%3Fd`);
+  });
+
+  it("percent-encodes app names", async () => {
+    const { fn, urls } = capturingFetch();
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    (client as any).loggedIn = true;
+    await client.startApp("my app");
+    expect(urls[0]).toBe(`${API}/apps/my%20app/start`);
+  });
+
+  it("leaves plain ids untouched", async () => {
+    const { fn, urls } = capturingFetch();
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    (client as any).loggedIn = true;
+    await client.getContainer("docker", "abc123");
+    expect(urls[0]).toBe(`${API}/container/docker/abc123`);
+  });
+});

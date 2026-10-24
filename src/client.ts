@@ -148,27 +148,27 @@ export class ContainerStationClient {
   }
 
   async getContainer(type: string, id: string): Promise<Container> {
-    return this.request<Container>(`/container/${type}/${id}`);
+    return this.request<Container>(`/container/${encodeURIComponent(type)}/${encodeURIComponent(id)}`);
   }
 
   async getContainerLogs(id: string): Promise<string> {
-    return this.request<string>(`/container/docker/${id}/logs`);
+    return this.request<string>(`/container/docker/${encodeURIComponent(id)}/logs`);
   }
 
   async startContainer(type: string, id: string): Promise<void> {
-    await this.request(`/container/${type}/${id}/start`, { method: "PUT" });
+    await this.request(`/container/${encodeURIComponent(type)}/${encodeURIComponent(id)}/start`, { method: "PUT" });
   }
 
   async stopContainer(type: string, id: string): Promise<void> {
-    await this.request(`/container/${type}/${id}/stop`, { method: "PUT" });
+    await this.request(`/container/${encodeURIComponent(type)}/${encodeURIComponent(id)}/stop`, { method: "PUT" });
   }
 
   async restartContainer(type: string, id: string): Promise<void> {
-    await this.request(`/container/${type}/${id}/restart`, { method: "PUT" });
+    await this.request(`/container/${encodeURIComponent(type)}/${encodeURIComponent(id)}/restart`, { method: "PUT" });
   }
 
   async removeContainer(type: string, id: string): Promise<void> {
-    await this.request(`/container/${type}/${id}`, { method: "DELETE" });
+    await this.request(`/container/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   async listApps(): Promise<App> {
@@ -176,15 +176,15 @@ export class ContainerStationClient {
   }
 
   async startApp(name: string): Promise<void> {
-    await this.request(`/apps/${name}/start`, { method: "PUT" });
+    await this.request(`/apps/${encodeURIComponent(name)}/start`, { method: "PUT" });
   }
 
   async stopApp(name: string): Promise<void> {
-    await this.request(`/apps/${name}/stop`, { method: "PUT" });
+    await this.request(`/apps/${encodeURIComponent(name)}/stop`, { method: "PUT" });
   }
 
   async restartApp(name: string): Promise<void> {
-    await this.request(`/apps/${name}/restart`, { method: "PUT" });
+    await this.request(`/apps/${encodeURIComponent(name)}/restart`, { method: "PUT" });
   }
 
   async getSystemResource(): Promise<SystemResource> {

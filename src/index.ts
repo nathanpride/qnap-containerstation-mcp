@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { ContainerStationClient } from "./client.js";
+import { appNameSchema, containerIdSchema, containerTypeSchema } from "./schemas.js";
 
 if (!process.env.QNAP_VERIFY_SSL || process.env.QNAP_VERIFY_SSL === "false") {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -39,7 +40,7 @@ server.tool(
 server.tool(
   "get_container",
   "Get details for a specific container",
-  { type: z.string().describe("Container type: docker, lxc, or lxd"), id: z.string().describe("Container ID") },
+  { type: containerTypeSchema, id: containerIdSchema },
   async ({ type, id }) => {
     const container = await client.getContainer(type, id);
     return { content: [{ type: "text", text: JSON.stringify(container, null, 2) }] };
@@ -49,7 +50,7 @@ server.tool(
 server.tool(
   "get_container_logs",
   "Fetch logs for a Docker container",
-  { id: z.string().describe("Container ID") },
+  { id: containerIdSchema },
   async ({ id }) => {
     const logs = await client.getContainerLogs(id);
     return { content: [{ type: "text", text: String(logs) }] };
@@ -59,7 +60,7 @@ server.tool(
 server.tool(
   "start_container",
   "Start a container",
-  { type: z.string().describe("Container type: docker, lxc, or lxd"), id: z.string().describe("Container ID") },
+  { type: containerTypeSchema, id: containerIdSchema },
   async ({ type, id }) => {
     await client.startContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} started.` }] };
@@ -69,7 +70,7 @@ server.tool(
 server.tool(
   "stop_container",
   "Stop a container",
-  { type: z.string().describe("Container type: docker, lxc, or lxd"), id: z.string().describe("Container ID") },
+  { type: containerTypeSchema, id: containerIdSchema },
   async ({ type, id }) => {
     await client.stopContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} stopped.` }] };
@@ -79,7 +80,7 @@ server.tool(
 server.tool(
   "restart_container",
   "Restart a container",
-  { type: z.string().describe("Container type: docker, lxc, or lxd"), id: z.string().describe("Container ID") },
+  { type: containerTypeSchema, id: containerIdSchema },
   async ({ type, id }) => {
     await client.restartContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} restarted.` }] };
@@ -99,7 +100,7 @@ server.tool(
 server.tool(
   "start_app",
   "Start a Docker Compose application",
-  { name: z.string().describe("Application name") },
+  { name: appNameSchema },
   async ({ name }) => {
     await client.startApp(name);
     return { content: [{ type: "text", text: `App ${name} started.` }] };
@@ -109,7 +110,7 @@ server.tool(
 server.tool(
   "stop_app",
   "Stop a Docker Compose application",
-  { name: z.string().describe("Application name") },
+  { name: appNameSchema },
   async ({ name }) => {
     await client.stopApp(name);
     return { content: [{ type: "text", text: `App ${name} stopped.` }] };
@@ -119,7 +120,7 @@ server.tool(
 server.tool(
   "restart_app",
   "Restart a Docker Compose application",
-  { name: z.string().describe("Application name") },
+  { name: appNameSchema },
   async ({ name }) => {
     await client.restartApp(name);
     return { content: [{ type: "text", text: `App ${name} restarted.` }] };
