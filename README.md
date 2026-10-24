@@ -122,4 +122,10 @@ npm run test:live
 
 # Override the test container (must be safe to stop/start)
 QNAP_TEST_CONTAINER_ID=<container-id> npm run test:live
+
+# Live v3 API tests (read-only by default). With QNAP_ALLOW_CREATE=1 it also
+# creates one throwaway compose app to verify the create flow and the
+# refuse-to-redeploy guard — remove it in the Container Station UI afterwards.
+npm run test:live:v3
+QNAP_ALLOW_CREATE=1 npm run test:live:v3
 ```
