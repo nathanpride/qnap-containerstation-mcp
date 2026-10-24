@@ -30,134 +30,189 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
-server.tool(
+// Tool annotations let MCP clients gate operations by risk: read-only tools
+// are always safe to call, destructive ones may need explicit approval.
+const READ_ONLY = { readOnlyHint: true };
+const START = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
+const STOP = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
+const RESTART = { readOnlyHint: false, destructiveHint: true, idempotentHint: false };
+
+server.registerTool(
   "list_containers",
-  "List all containers with their state, image, type, and project",
-  {},
+  {
+    title: "List Containers",
+    description: "List all containers with their state, image, type, and project",
+    annotations: READ_ONLY,
+  },
   async () => {
     const containers = await client.listContainers();
     return { content: [{ type: "text", text: JSON.stringify(containers, null, 2) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "get_container",
-  "Get details for a specific container",
-  { type: containerTypeSchema, id: containerIdSchema },
+  {
+    title: "Get Container",
+    description: "Get details for a specific container",
+    inputSchema: { type: containerTypeSchema, id: containerIdSchema },
+    annotations: READ_ONLY,
+  },
   async ({ type, id }) => {
     const container = await client.getContainer(type, id);
     return { content: [{ type: "text", text: JSON.stringify(container, null, 2) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "get_container_logs",
-  "Fetch logs for a Docker container",
-  { id: containerIdSchema },
+  {
+    title: "Get Container Logs",
+    description: "Fetch logs for a Docker container",
+    inputSchema: { id: containerIdSchema },
+    annotations: READ_ONLY,
+  },
   async ({ id }) => {
     const logs = await client.getContainerLogs(id);
     return { content: [{ type: "text", text: String(logs) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "start_container",
-  "Start a container",
-  { type: containerTypeSchema, id: containerIdSchema },
+  {
+    title: "Start Container",
+    description: "Start a container",
+    inputSchema: { type: containerTypeSchema, id: containerIdSchema },
+    annotations: START,
+  },
   async ({ type, id }) => {
     await client.startContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} started.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "stop_container",
-  "Stop a container",
-  { type: containerTypeSchema, id: containerIdSchema },
+  {
+    title: "Stop Container",
+    description: "Stop a container",
+    inputSchema: { type: containerTypeSchema, id: containerIdSchema },
+    annotations: STOP,
+  },
   async ({ type, id }) => {
     await client.stopContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} stopped.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "restart_container",
-  "Restart a container",
-  { type: containerTypeSchema, id: containerIdSchema },
+  {
+    title: "Restart Container",
+    description: "Restart a container",
+    inputSchema: { type: containerTypeSchema, id: containerIdSchema },
+    annotations: RESTART,
+  },
   async ({ type, id }) => {
     await client.restartContainer(type, id);
     return { content: [{ type: "text", text: `Container ${id} restarted.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "list_apps",
-  "List all Docker Compose applications",
-  {},
+  {
+    title: "List Apps",
+    description: "List all Docker Compose applications",
+    annotations: READ_ONLY,
+  },
   async () => {
     const apps = await client.listApps();
     return { content: [{ type: "text", text: JSON.stringify(apps, null, 2) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "start_app",
-  "Start a Docker Compose application",
-  { name: appNameSchema },
+  {
+    title: "Start App",
+    description: "Start a Docker Compose application",
+    inputSchema: { name: appNameSchema },
+    annotations: START,
+  },
   async ({ name }) => {
     await client.startApp(name);
     return { content: [{ type: "text", text: `App ${name} started.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "stop_app",
-  "Stop a Docker Compose application",
-  { name: appNameSchema },
+  {
+    title: "Stop App",
+    description: "Stop a Docker Compose application",
+    inputSchema: { name: appNameSchema },
+    annotations: STOP,
+  },
   async ({ name }) => {
     await client.stopApp(name);
     return { content: [{ type: "text", text: `App ${name} stopped.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "restart_app",
-  "Restart a Docker Compose application",
-  { name: appNameSchema },
+  {
+    title: "Restart App",
+    description: "Restart a Docker Compose application",
+    inputSchema: { name: appNameSchema },
+    annotations: RESTART,
+  },
   async ({ name }) => {
     await client.restartApp(name);
     return { content: [{ type: "text", text: `App ${name} restarted.` }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "get_system_resource",
-  "Get current CPU and memory usage",
-  {},
+  {
+    title: "Get System Resource Usage",
+    description: "Get current CPU and memory usage",
+    annotations: READ_ONLY,
+  },
   async () => {
     const resource = await client.getSystemResource();
     return { content: [{ type: "text", text: JSON.stringify(resource, null, 2) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "list_networks",
-  "List all Docker networks",
-  {},
+  {
+    title: "List Networks",
+    description: "List all Docker networks",
+    annotations: READ_ONLY,
+  },
   async () => {
     const networks = await client.listNetworks();
     return { content: [{ type: "text", text: JSON.stringify(networks, null, 2) }] };
   }
 );
 
-server.tool(
+server.registerTool(
   "get_logs",
-  "Query Container Station system logs",
   {
-    limit: z.number().optional().describe("Max number of log entries to return"),
-    offset: z.number().optional().describe("Number of entries to skip"),
-    level: z.enum(["INFO", "WARN", "ERROR"]).optional().describe("Filter by log level"),
-    category: z.string().optional().describe("Filter by category: container, image, import, export, backup, system"),
+    title: "Get System Logs",
+    description: "Query Container Station system logs",
+    inputSchema: {
+      limit: z.number().optional().describe("Max number of log entries to return"),
+      offset: z.number().optional().describe("Number of entries to skip"),
+      level: z.enum(["INFO", "WARN", "ERROR"]).optional().describe("Filter by log level"),
+      category: z.string().optional().describe("Filter by category: container, image, import, export, backup, system"),
+    },
+    annotations: READ_ONLY,
   },
   async ({ limit, offset, level, category }) => {
     const logs = await client.getLogs({ limit, offset, level, category });
