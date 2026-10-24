@@ -5,8 +5,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { ContainerStationClient } from "./client.js";
 
-if (!process.env.QNAP_VERIFY_SSL || process.env.QNAP_VERIFY_SSL === "false") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+if (process.env.QNAP_VERIFY_SSL !== "true") {
+  console.error(
+    'Warning: TLS certificate verification is disabled (QNAP_VERIFY_SSL is not "true"). ' +
+      "This is expected for QNAP devices with self-signed certificates, but only use it on networks you trust."
+  );
 }
 
 const client = new ContainerStationClient({

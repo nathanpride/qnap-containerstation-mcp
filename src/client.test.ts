@@ -149,3 +149,59 @@ describe("getLogs", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("category=container");
   });
 });
+
+describe("TLS verification scoping", () => {
+  function initCapturingFetch() {
+    const inits: RequestInit[] = [];
+    const fn = vi.fn(async (_url: string, init: RequestInit = {}) => {
+      inits.push(init);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => [],
+        text: async () => "",
+      };
+    });
+    return { fn, inits };
+  }
+
+  it("passes an undici dispatcher when verifySSL is false", async () => {
+    const { fn, inits } = initCapturingFetch();
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    (client as any).loggedIn = true;
+    await client.listContainers();
+    expect((inits[0] as any).dispatcher).toBeDefined();
+  });
+
+  it("passes no dispatcher when verifySSL is true", async () => {
+    const { fn, inits } = initCapturingFetch();
+    vi.stubGlobal("fetch", fn);
+    const client = new ContainerStationClient({
+      baseUrl: BASE_URL,
+      username: "user",
+      password: "pass",
+      verifySSL: true,
+    });
+    (client as any).loggedIn = true;
+    await client.listContainers();
+    expect((inits[0] as any).dispatcher).toBeUndefined();
+  });
+
+  it("does not touch NODE_TLS_REJECT_UNAUTHORIZED", async () => {
+    const saved = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    try {
+      const { fn } = initCapturingFetch();
+      vi.stubGlobal("fetch", fn);
+      const client = makeClient();
+      (client as any).loggedIn = true;
+      await client.listContainers();
+      expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined();
+    } finally {
+      if (saved === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = saved;
+    }
+  });
+});
