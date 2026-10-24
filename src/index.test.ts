@@ -99,6 +99,16 @@ describe("tool: start/stop/restart container", () => {
   });
 });
 
+describe("tool: get_container_logs", () => {
+  it("returns log text for a container", async () => {
+    const mock = await getMock();
+    mock.getContainerLogs.mockResolvedValue("2026-01-01 hello\n");
+    const result = await mock.getContainerLogs("abc123");
+    expect(mock.getContainerLogs).toHaveBeenCalledWith("abc123");
+    expect(result).toContain("hello");
+  });
+});
+
 describe("tool: list_apps", () => {
   it("returns app list", async () => {
     const mock = await getMock();
@@ -123,6 +133,13 @@ describe("tool: start/stop/restart app", () => {
     await mock.stopApp("my-app");
     expect(mock.stopApp).toHaveBeenCalledWith("my-app");
   });
+
+  it("calls restartApp", async () => {
+    const mock = await getMock();
+    mock.restartApp.mockResolvedValue(undefined);
+    await mock.restartApp("my-app");
+    expect(mock.restartApp).toHaveBeenCalledWith("my-app");
+  });
 });
 
 describe("tool: get_system_resource", () => {
@@ -133,6 +150,20 @@ describe("tool: get_system_resource", () => {
 
     const result = await mock.getSystemResource();
     expect(result.cpu).toBe(12.5);
+  });
+});
+
+describe("tool: list_networks", () => {
+  it("returns network list", async () => {
+    const mock = await getMock();
+    const networks = [
+      { Name: "bridge", Id: "n1", Driver: "bridge", Scope: "local", Internal: false, IPAM: {}, Options: {} },
+    ];
+    mock.listNetworks.mockResolvedValue(networks);
+
+    const result = await mock.listNetworks();
+    expect(result).toHaveLength(1);
+    expect(result[0].Name).toBe("bridge");
   });
 });
 
