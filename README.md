@@ -91,15 +91,24 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 | `get_logs` | Query Container Station system logs |
 | `list_compose_apps` | List Compose apps with status and resource limits (v3 API) |
 | `get_compose_file` | Get the docker-compose YAML Container Station uses for an app (v3 API) |
+| `validate_compose_file` | Validate a compose YAML without creating anything (v3 API) |
+| `create_compose_app` | Create a Compose app from a YAML document (v3 API) |
+| `list_images` | List container images on the NAS (v3 API) |
+| `list_volumes` | List container volumes with usage (v3 API) |
+| `get_overview` | Container Station overview: apps, status, counts (v3 API) |
 
 > **Note:** Confirmed working on Container Station 3.x: `list_containers`, `list_apps`,
 > `start_container`, `stop_container`, `restart_container`. Other endpoints may return 404
 > depending on your Container Station version.
 
-> **Note:** `list_compose_apps` and `get_compose_file` use the v3 API introduced in
-> Container Station 3.1 (the one the Container Station web UI itself uses). It is not
-> officially documented and may change between versions; both tools reuse the same
-> v1 login session and fail with a clear error if the endpoints are unavailable.
+> **Note:** The v3 tools use the API introduced in Container Station 3.1 (the one
+> the Container Station web UI itself uses). It is not officially documented and
+> may change between versions; all reuse the same v1 login session and fail with
+> a clear error if the endpoints are unavailable. `create_compose_app` is the one
+> **write** tool: it sends `operation:"create"` only (never recreate/duplicate),
+> so it fails rather than overwriting an existing app. Bind-mount source paths in
+> the YAML must already exist on the NAS — see the TLS section of the README for
+> the directory and ordering rules.
 
 ## Tests
 
