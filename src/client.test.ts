@@ -26,6 +26,30 @@ function mockFetch(responses: Array<{ status: number; body: unknown; headers?: R
   });
 }
 
+function capturingFetch(responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>) {
+  const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
+  let call = 0;
+  const fn = vi.fn(async (url: string, init: RequestInit = {}) => {
+    calls.push({
+      url,
+      method: init.method ?? "GET",
+      headers: (init.headers as Record<string, string>) ?? {},
+    });
+    const r = responses[call++] ?? responses[responses.length - 1];
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      headers: { get: (h: string) => r.headers?.[h] ?? null },
+      json: async () => r.body,
+      text: async () => JSON.stringify(r.body),
+    };
+  });
+  return { fn, calls };
+}
+
+const API = `${BASE_URL}/container-station/api/v1`;
+const LOGIN_OK = { status: 200, body: { username: "user", isAdmin: false }, headers: { "set-cookie": "sess=abc123; Path=/" } };
+
 beforeEach(() => {
   vi.unstubAllGlobals();
 });
@@ -147,5 +171,187 @@ describe("getLogs", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("limit=10");
     expect(fetchMock.mock.calls[0][0]).toContain("level=ERROR");
     expect(fetchMock.mock.calls[0][0]).toContain("category=container");
+  });
+
+  it("omits the query string when no params are given", async () => {
+    const fetchMock = mockFetch([{ status: 200, body: [] }]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient();
+    (client as any).loggedIn = true;
+    await client.getLogs();
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API}/log`);
+  });
+});
+
+describe("session cookie", () => {
+  it("captures the session cookie on login and replays it on later requests", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: [] }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.listContainers();
+    expect(calls[1].headers["Cookie"]).toContain("sess=abc123");
+  });
+
+  it("sends no Cookie header before login", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: [] }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.listContainers();
+    expect(calls[0].headers["Cookie"]).toBeUndefined();
+  });
+});
+
+describe("login failures", () => {
+  it("throws with status and body when credentials are rejected", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 401, body: { message: "invalid credentials" } }]));
+    const client = makeClient();
+    await expect(client.login()).rejects.toThrow(/Login failed \(401\)/);
+  });
+});
+
+describe("logout", () => {
+  it("sends PUT /logout and clears the session", async () => {
+    const { fn, calls } = capturingFetch([
+      LOGIN_OK,
+      { status: 200, body: {} },
+      { status: 200, body: [] },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.listContainers();
+    await client.logout();
+    expect(calls[2].method).toBe("PUT");
+    expect(calls[2].url).toBe(`${API}/logout`);
+    // after logout the next request must log in again
+    await client.listContainers();
+    expect(calls[3].method).toBe("POST");
+    expect(calls[3].url).toBe(`${API}/login`);
+  });
+});
+
+describe("request retry and error handling", () => {
+  it("re-logs in and retries once after a 401", async () => {
+    const { fn, calls } = capturingFetch([
+      LOGIN_OK,
+      { status: 401, body: { message: "session expired" } },
+      LOGIN_OK,
+      { status: 200, body: [] },
+    ]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await expect(client.listContainers()).resolves.toEqual([]);
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      `POST ${API}/login`,
+      `GET ${API}/container`,
+      `POST ${API}/login`,
+      `GET ${API}/container`,
+    ]);
+  });
+
+  it("throws if the request still fails with 401 after re-login", async () => {
+    vi.stubGlobal("fetch", mockFetch([
+      LOGIN_OK,
+      { status: 401, body: { message: "unauthorized" } },
+      LOGIN_OK,
+      { status: 401, body: { message: "unauthorized" } },
+    ]));
+    const client = makeClient();
+    await expect(client.listContainers()).rejects.toThrow(/Request failed \(401\)/);
+  });
+
+  it("throws a version hint on 404", async () => {
+    vi.stubGlobal("fetch", mockFetch([
+      LOGIN_OK,
+      { status: 404, body: { message: "not found" } },
+    ]));
+    const client = makeClient();
+    await expect(client.listContainers()).rejects.toThrow(/Endpoint not found \(404\)/);
+  });
+
+  it("throws with status and body on other errors", async () => {
+    vi.stubGlobal("fetch", mockFetch([
+      LOGIN_OK,
+      { status: 500, body: { message: "internal error" } },
+    ]));
+    const client = makeClient();
+    await expect(client.listContainers()).rejects.toThrow(/Request failed \(500\)/);
+  });
+});
+
+describe("container endpoints", () => {
+  it("getContainer calls the typed path", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: {} }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.getContainer("docker", "abc123");
+    expect(calls[1].url).toBe(`${API}/container/docker/abc123`);
+  });
+
+  it("getContainerLogs calls the docker logs path", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: "log output" }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    const result = await client.getContainerLogs("abc123");
+    expect(calls[1].url).toBe(`${API}/container/docker/abc123/logs`);
+    expect(result).toBe("log output");
+  });
+
+  it("start/stop/restart use PUT on the action paths", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: {} }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.startContainer("docker", "abc123");
+    await client.stopContainer("docker", "abc123");
+    await client.restartContainer("docker", "abc123");
+    expect(calls.slice(1).map((c) => `${c.method} ${c.url}`)).toEqual([
+      `PUT ${API}/container/docker/abc123/start`,
+      `PUT ${API}/container/docker/abc123/stop`,
+      `PUT ${API}/container/docker/abc123/restart`,
+    ]);
+  });
+
+  it("removeContainer uses DELETE", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: {} }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.removeContainer("docker", "abc123");
+    expect(calls[1].method).toBe("DELETE");
+    expect(calls[1].url).toBe(`${API}/container/docker/abc123`);
+  });
+});
+
+describe("app endpoints", () => {
+  it("start/stop/restart use PUT on the app action paths", async () => {
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: {} }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await client.startApp("my-app");
+    await client.stopApp("my-app");
+    await client.restartApp("my-app");
+    expect(calls.slice(1).map((c) => `${c.method} ${c.url}`)).toEqual([
+      `PUT ${API}/apps/my-app/start`,
+      `PUT ${API}/apps/my-app/stop`,
+      `PUT ${API}/apps/my-app/restart`,
+    ]);
+  });
+});
+
+describe("system and network endpoints", () => {
+  it("getSystemResource calls /system/resource", async () => {
+    const resource = { cpu: 10, memory: { total: 1, used: 1, buffers: 0, cached: 0 } };
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: resource }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await expect(client.getSystemResource()).resolves.toEqual(resource);
+    expect(calls[1].url).toBe(`${API}/system/resource`);
+  });
+
+  it("listNetworks calls /networks", async () => {
+    const networks = [{ Name: "bridge", Id: "n1", Driver: "bridge", Scope: "local", Internal: false, IPAM: {}, Options: {} }];
+    const { fn, calls } = capturingFetch([LOGIN_OK, { status: 200, body: networks }]);
+    vi.stubGlobal("fetch", fn);
+    const client = makeClient();
+    await expect(client.listNetworks()).resolves.toEqual(networks);
+    expect(calls[1].url).toBe(`${API}/networks`);
   });
 });
